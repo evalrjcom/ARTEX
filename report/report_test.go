@@ -401,3 +401,43 @@ func TestFindingFilenameUnicodeAndIDSuffix(t *testing.T) {
 		t.Fatalf("expected preserved distinct ID suffixes: f1=%q f2=%q", f1, f2)
 	}
 }
+
+func TestMarkdownSeverityOrder(t *testing.T) {
+	task := Markdown(Input{Findings: []*db.Node{
+		reportNode(1, "custom", "custom label"),
+		reportNode(2, "low", "low label"),
+		reportNode(3, "HIGH", "high label"),
+	}})
+	export := FindingsMarkdown([]*db.DBFinding{
+		{Severity: "custom", Name: "custom label"},
+		{Severity: "low", Name: "low label"},
+		{Severity: "HIGH", Name: "high label"},
+	}, time.Time{})
+	for _, doc := range []string{task, export} {
+		high := strings.Index(doc, "[HIGH] high label")
+		low := strings.Index(doc, "[LOW] low label")
+		custom := strings.Index(doc, "[CUSTOM] custom label")
+		if high < 0 || high >= low || low >= custom {
+			t.Fatalf("wrong severity order in:\n%s", doc)
+		}
+	}
+	if !strings.Contains(export, "| High | 1 |") {
+		t.Fatalf("summary missed uppercase severity:\n%s", export)
+	}
+}
+
+func TestMarkdownEvidencePreservesBackticks(t *testing.T) {
+	evidence := "sample\n````\n# literal text"
+	node := reportNode(1, "low", "example")
+	node.Payload = []byte(fmt.Sprintf(`{"evidence":{"poc":%q}}`, evidence))
+	finding := &db.DBFinding{Evidence: evidence}
+	for _, doc := range []string{
+		Markdown(Input{Findings: []*db.Node{node}}),
+		FindingsMarkdown([]*db.DBFinding{finding}, time.Time{}),
+		SingleFindingMarkdown(finding, time.Time{}),
+	} {
+		if !strings.Contains(doc, "\n`````\n"+evidence+"\n`````\n\n") {
+			t.Fatalf("evidence is not enclosed by a longer fence:\n%s", doc)
+		}
+	}
+}
