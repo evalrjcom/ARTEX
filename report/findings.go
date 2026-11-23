@@ -23,9 +23,9 @@ import (
 // sortFindingsForExport sorts by severity descending, then by time descending, consistent with the summary report's grouping.
 func sortFindingsForExport(fs []*db.DBFinding) {
 	sort.SliceStable(fs, func(i, j int) bool {
-		ri, rj := sevRank[fs[i].Severity], sevRank[fs[j].Severity]
+		ri, rj := severityRank(fs[i].Severity), severityRank(fs[j].Severity)
 		if ri != rj {
-			return ri < rj // smaller sevRank means more severe
+			return ri < rj
 		}
 		return fs[i].CreatedAt.After(fs[j].CreatedAt)
 	})
@@ -50,7 +50,7 @@ func FindingsMarkdown(fs []*db.DBFinding, generatedAt time.Time) string {
 	// Summary: counts per severity.
 	counts := map[string]int{}
 	for _, f := range items {
-		counts[f.Severity]++
+		counts[strings.ToLower(strings.TrimSpace(f.Severity))]++
 	}
 	b.WriteString("## Summary\n\n")
 	b.WriteString("| Severity | Count |\n| --- | --- |\n")
@@ -84,7 +84,8 @@ func FindingsMarkdown(fs []*db.DBFinding, generatedAt time.Time) string {
 			fmt.Fprintf(&b, "%s\n\n", s)
 		}
 		if e := strings.TrimSpace(f.Evidence); e != "" {
-			fmt.Fprintf(&b, "**Evidence:**\n\n```\n%s\n```\n\n", e)
+			b.WriteString("**Evidence:**\n\n")
+			writeLiteralBlock(&b, e)
 		}
 		b.WriteString(qualityNarrative(q))
 		b.WriteString(detailedReportFull(f.Report, "**Detailed report:**"))
@@ -115,7 +116,8 @@ func SingleFindingMarkdown(f *db.DBFinding, generatedAt time.Time) string {
 		fmt.Fprintf(&b, "## Summary\n\n%s\n\n", s)
 	}
 	if e := strings.TrimSpace(f.Evidence); e != "" {
-		fmt.Fprintf(&b, "## Evidence\n\n```\n%s\n```\n\n", e)
+		b.WriteString("## Evidence\n\n")
+		writeLiteralBlock(&b, e)
 	}
 	b.WriteString(qualityNarrative(q))
 	b.WriteString(detailedReportFull(f.Report, "## Detailed Report"))
